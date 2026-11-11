@@ -9,7 +9,7 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -23,19 +23,915 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build Debug APK
+      - name: Generate Verified Android Project & Compile APK
         run: |
-          GRADLE_FILE=$(find . -name "settings.gradle.kts" | head -n 1)
-          if [ -z "$GRADLE_FILE" ]; then
-            echo "ERROR: Android project files not found! Upload the extracted ZIP files to the Code tab first."
-            exit 1
-          fi
-          PROJECT_DIR=$(dirname "$GRADLE_FILE")
-          cd "$PROJECT_DIR"
-          gradle assembleDebug --stacktrace
+          mkdir -p /tmp/NativeCameraBuild/app/src/main/java/com/rawcam/nativepro
+          mkdir -p /tmp/NativeCameraBuild/app/src/main/res/layout
+          mkdir -p /tmp/NativeCameraBuild/app/src/main/res/values
+          mkdir -p /tmp/NativeCameraBuild/app/src/main/res/drawable
+          cd /tmp/NativeCameraBuild
+
+          cat << 'EOF' > settings.gradle.kts
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "NativeCameraPro"
+          include(":app")
+          EOF
+
+          cat << 'EOF' > build.gradle.kts
+          plugins {
+              id("com.android.application") version "8.4.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          EOF
+
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat << 'EOF' > app/build.gradle.kts
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.rawcam.nativepro"
+              compileSdk = 34
+
+              defaultConfig {
+                  applicationId = "com.rawcam.nativepro"
+                  minSdk = 26
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0.0"
+              }
+
+              buildTypes {
+                  debug {
+                      isDebuggable = true
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.13.1")
+              implementation("androidx.appcompat:appcompat:1.7.0")
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-feature android:name="android.hardware.camera" android:required="true" />
+              <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+              <uses-permission android:name="android.permission.CAMERA" />
+              <uses-permission android:name="android.permission.RECORD_AUDIO" />
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="Native Camera Pro"
+                  android:icon="@drawable/ic_launcher"
+                  android:roundIcon="@drawable/ic_launcher"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.AppCompat.NoActionBar">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="portrait"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/ic_launcher.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path android:fillColor="#121212" android:pathData="M0,0h108v108h-108z" />
+              <path android:fillColor="#2A2A2E" android:pathData="M24,34h60c4.4,0 8,3.6 8,8v32c0,4.4 -3.6,8 -8,8H24c-4.4,0 -8,-3.6 -8,-8V42c0,-4.4 3.6,-8 8,-8z" />
+              <path android:fillColor="#1E88E5" android:pathData="M54,58m-16,0a16,16 0,1 1,32 0a16,16 0,1 1,-32 0" />
+              <path android:fillColor="#E53935" android:pathData="M78,42m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+          </vector>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:background="#0A0A0C"
+              android:keepScreenOn="true">
+
+              <TextureView
+                  android:id="@+id/viewfinder"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent" />
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_gravity="top"
+                  android:orientation="vertical"
+                  android:background="#CC141418"
+                  android:padding="12dp">
+
+                  <LinearLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:orientation="horizontal"
+                      android:gravity="center_vertical">
+
+                      <TextView
+                          android:id="@+id/tvRecTimer"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="1"
+                          android:text="STANDBY"
+                          android:textColor="#F5F5F7"
+                          android:textStyle="bold"
+                          android:fontFamily="monospace"
+                          android:textSize="14sp" />
+
+                      <TextView
+                          android:id="@+id/tvSensorStatus"
+                          android:layout_width="wrap_content"
+                          android:layout_height="wrap_content"
+                          android:text="ISP BYPASS: ON (EDGE OFF / NR MIN)"
+                          android:textColor="#FFB300"
+                          android:fontFamily="monospace"
+                          android:textSize="11sp" />
+                  </LinearLayout>
+
+                  <HorizontalScrollView
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:scrollbars="none"
+                      android:layout_marginTop="8dp">
+
+                      <LinearLayout
+                          android:layout_width="wrap_content"
+                          android:layout_height="wrap_content"
+                          android:orientation="horizontal">
+
+                          <Button
+                              android:id="@+id/btnBypassIsp"
+                              android:layout_width="wrap_content"
+                              android:layout_height="38dp"
+                              android:text="RAW ISP: ON"
+                              android:textSize="11sp" />
+
+                          <Button
+                              android:id="@+id/btnResolution"
+                              android:layout_width="wrap_content"
+                              android:layout_height="38dp"
+                              android:layout_marginStart="6dp"
+                              android:text="1080p"
+                              android:textSize="11sp" />
+
+                          <Button
+                              android:id="@+id/btnFps"
+                              android:layout_width="wrap_content"
+                              android:layout_height="38dp"
+                              android:layout_marginStart="6dp"
+                              android:text="30 FPS"
+                              android:textSize="11sp" />
+
+                          <Button
+                              android:id="@+id/btnBitrate"
+                              android:layout_width="wrap_content"
+                              android:layout_height="38dp"
+                              android:layout_marginStart="6dp"
+                              android:text="50 Mbps"
+                              android:textSize="11sp" />
+
+                          <Button
+                              android:id="@+id/btnAudioSource"
+                              android:layout_width="wrap_content"
+                              android:layout_height="38dp"
+                              android:layout_marginStart="6dp"
+                              android:text="MIC: RAW"
+                              android:textSize="11sp" />
+
+                          <Button
+                              android:id="@+id/btnWbLock"
+                              android:layout_width="wrap_content"
+                              android:layout_height="38dp"
+                              android:layout_marginStart="6dp"
+                              android:text="WB: AUTO"
+                              android:textSize="11sp" />
+                      </LinearLayout>
+                  </HorizontalScrollView>
+              </LinearLayout>
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_gravity="bottom"
+                  android:orientation="vertical"
+                  android:background="#CC141418"
+                  android:padding="14dp">
+
+                  <LinearLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:orientation="horizontal"
+                      android:gravity="center_vertical"
+                      android:layout_marginBottom="6dp">
+
+                      <Button
+                          android:id="@+id/btnAeMode"
+                          android:layout_width="wrap_content"
+                          android:layout_height="38dp"
+                          android:text="EXP: AUTO"
+                          android:textSize="11sp" />
+
+                      <Button
+                          android:id="@+id/btnIsoBoost"
+                          android:layout_width="wrap_content"
+                          android:layout_height="38dp"
+                          android:layout_marginStart="6dp"
+                          android:text="BOOST ISO: OFF"
+                          android:textSize="11sp" />
+
+                      <Button
+                          android:id="@+id/btnSwitchLens"
+                          android:layout_width="wrap_content"
+                          android:layout_height="38dp"
+                          android:layout_marginStart="6dp"
+                          android:text="LENS: BACK"
+                          android:textSize="11sp" />
+                  </LinearLayout>
+
+                  <LinearLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:orientation="horizontal"
+                      android:gravity="center_vertical">
+                      <TextView
+                          android:id="@+id/tvIsoLabel"
+                          android:layout_width="95dp"
+                          android:layout_height="wrap_content"
+                          android:text="ISO: AUTO"
+                          android:textColor="#F5F5F7"
+                          android:fontFamily="monospace"
+                          android:textSize="12sp" />
+                      <SeekBar
+                          android:id="@+id/seekIso"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="1"
+                          android:max="100"
+                          android:progress="20" />
+                  </LinearLayout>
+
+                  <LinearLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:orientation="horizontal"
+                      android:gravity="center_vertical"
+                      android:layout_marginTop="4dp">
+                      <TextView
+                          android:id="@+id/tvShutterLabel"
+                          android:layout_width="95dp"
+                          android:layout_height="wrap_content"
+                          android:text="SHT: 1/60"
+                          android:textColor="#F5F5F7"
+                          android:fontFamily="monospace"
+                          android:textSize="12sp" />
+                      <SeekBar
+                          android:id="@+id/seekShutter"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="1"
+                          android:max="100"
+                          android:progress="25" />
+                  </LinearLayout>
+
+                  <LinearLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:orientation="horizontal"
+                      android:gravity="center_vertical"
+                      android:layout_marginTop="4dp">
+                      <TextView
+                          android:id="@+id/tvFocusLabel"
+                          android:layout_width="95dp"
+                          android:layout_height="wrap_content"
+                          android:text="FOC: AUTO"
+                          android:textColor="#F5F5F7"
+                          android:fontFamily="monospace"
+                          android:textSize="12sp" />
+                      <SeekBar
+                          android:id="@+id/seekFocus"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="1"
+                          android:max="100"
+                          android:progress="0" />
+                  </LinearLayout>
+
+                  <Button
+                      android:id="@+id/btnRecord"
+                      android:layout_width="180dp"
+                      android:layout_height="50dp"
+                      android:layout_gravity="center_horizontal"
+                      android:layout_marginTop="10dp"
+                      android:text="REC VIDEO"
+                      android:textStyle="bold"
+                      android:textColor="#FFFFFF"
+                      android:backgroundTint="#FF2E2E" />
+              </LinearLayout>
+          </FrameLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/rawcam/nativepro/MainActivity.kt
+          package com.rawcam.nativepro
+
+          import android.Manifest
+          import android.annotation.SuppressLint
+          import android.content.ContentValues
+          import android.content.Context
+          import android.content.pm.PackageManager
+          import android.graphics.SurfaceTexture
+          import android.hardware.camera2.*
+          import android.media.MediaRecorder
+          import android.os.*
+          import android.provider.MediaStore
+          import android.util.Range
+          import android.util.Size
+          import android.view.Surface
+          import android.view.TextureView
+          import android.widget.Button
+          import android.widget.SeekBar
+          import android.widget.TextView
+          import android.widget.Toast
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.app.ActivityCompat
+          import androidx.core.content.ContextCompat
+
+          class MainActivity : AppCompatActivity() {
+
+              private lateinit var viewfinder: TextureView
+              private lateinit var tvRecTimer: TextView
+              private lateinit var tvSensorStatus: TextView
+              private lateinit var btnBypassIsp: Button
+              private lateinit var btnResolution: Button
+              private lateinit var btnFps: Button
+              private lateinit var btnBitrate: Button
+              private lateinit var btnAudioSource: Button
+              private lateinit var btnWbLock: Button
+              private lateinit var btnAeMode: Button
+              private lateinit var btnIsoBoost: Button
+              private lateinit var btnSwitchLens: Button
+              private lateinit var tvIsoLabel: TextView
+              private lateinit var seekIso: SeekBar
+              private lateinit var tvShutterLabel: TextView
+              private lateinit var seekShutter: SeekBar
+              private lateinit var tvFocusLabel: TextView
+              private lateinit var seekFocus: SeekBar
+              private lateinit var btnRecord: Button
+
+              private var cameraDevice: CameraDevice? = null
+              private var captureSession: CameraCaptureSession? = null
+              private var previewRequestBuilder: CaptureRequest.Builder? = null
+              private var mediaRecorder: MediaRecorder? = null
+              private var activePfd: ParcelFileDescriptor? = null
+
+              private var backgroundThread: HandlerThread? = null
+              private var backgroundHandler: Handler? = null
+
+              private var currentCameraId: String = "0"
+              private var isFrontLens = false
+              private var isRecording = false
+
+              private var bypassIsp = true
+              private var manualExposure = false
+              private var isoBoost = false
+              private var wbLocked = false
+              private var manualFocus = false
+
+              private val resolutions = listOf(Size(1920, 1080), Size(3840, 2160), Size(1280, 720))
+              private var resIndex = 0
+              private val fpsOptions = listOf(24, 30, 60)
+              private var fpsIndex = 1
+              private val bitrateOptions = listOf(20_000_000, 50_000_000, 80_000_000, 120_000_000)
+              private var bitrateIndex = 1
+              private var useUnprocessedAudio = true
+
+              private var isoRange: Range<Int> = Range(100, 3200)
+              private var exposureTimeRange: Range<Long> = Range(100_000L, 100_000_000L)
+              private var minFocusDist: Float = 0f
+
+              private var currentIso: Int = 400
+              private var currentShutterNs: Long = 16_666_666L
+              private var currentFocusDiopter: Float = 0f
+
+              private var recStartTime = 0L
+              private val uiHandler = Handler(Looper.getMainLooper())
+              private val timerRunnable = object : Runnable {
+                  override fun run() {
+                      if (isRecording) {
+                          val elapsedSec = (SystemClock.elapsedRealtime() - recStartTime) / 1000
+                          tvRecTimer.text = String.format("REC %02d:%02d", elapsedSec / 60, elapsedSec % 60)
+                          uiHandler.postDelayed(this, 500)
+                      }
+                  }
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  viewfinder = findViewById(R.id.viewfinder)
+                  tvRecTimer = findViewById(R.id.tvRecTimer)
+                  tvSensorStatus = findViewById(R.id.tvSensorStatus)
+                  btnBypassIsp = findViewById(R.id.btnBypassIsp)
+                  btnResolution = findViewById(R.id.btnResolution)
+                  btnFps = findViewById(R.id.btnFps)
+                  btnBitrate = findViewById(R.id.btnBitrate)
+                  btnAudioSource = findViewById(R.id.btnAudioSource)
+                  btnWbLock = findViewById(R.id.btnWbLock)
+                  btnAeMode = findViewById(R.id.btnAeMode)
+                  btnIsoBoost = findViewById(R.id.btnIsoBoost)
+                  btnSwitchLens = findViewById(R.id.btnSwitchLens)
+                  tvIsoLabel = findViewById(R.id.tvIsoLabel)
+                  seekIso = findViewById(R.id.seekIso)
+                  tvShutterLabel = findViewById(R.id.tvShutterLabel)
+                  seekShutter = findViewById(R.id.seekShutter)
+                  tvFocusLabel = findViewById(R.id.tvFocusLabel)
+                  seekFocus = findViewById(R.id.seekFocus)
+                  btnRecord = findViewById(R.id.btnRecord)
+
+                  setupControls()
+              }
+
+              override fun onResume() {
+                  super.onResume()
+                  startBackgroundThread()
+                  if (viewfinder.isAvailable) {
+                      checkPermissionsAndOpenCamera()
+                  } else {
+                      viewfinder.surfaceTextureListener = surfaceTextureListener
+                  }
+              }
+
+              override fun onPause() {
+                  if (isRecording) stopRecordingVideo()
+                  closeCamera()
+                  stopBackgroundThread()
+                  super.onPause()
+              }
+
+              private val surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                  override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+                      checkPermissionsAndOpenCamera()
+                  }
+                  override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
+                  override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean = true
+                  override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+              }
+
+              private fun setupControls() {
+                  btnBypassIsp.setOnClickListener {
+                      bypassIsp = !bypassIsp
+                      btnBypassIsp.text = if (bypassIsp) "RAW ISP: ON" else "RAW ISP: OFF"
+                      tvSensorStatus.text = if (bypassIsp) "ISP BYPASS: ON (EDGE OFF / NR MIN)" else "ISP BYPASS: OFF (STOCK)"
+                      applyPipelineParameters()
+                  }
+
+                  btnResolution.setOnClickListener {
+                      if (isRecording) return@setOnClickListener
+                      resIndex = (resIndex + 1) % resolutions.size
+                      val s = resolutions[resIndex]
+                      btnResolution.text = when (s.height) {
+                          2160 -> "4K UHD"
+                          1080 -> "1080p"
+                          else -> "720p"
+                      }
+                      reopenCamera()
+                  }
+
+                  btnFps.setOnClickListener {
+                      if (isRecording) return@setOnClickListener
+                      fpsIndex = (fpsIndex + 1) % fpsOptions.size
+                      btnFps.text = "${fpsOptions[fpsIndex]} FPS"
+                      applyPipelineParameters()
+                  }
+
+                  btnBitrate.setOnClickListener {
+                      if (isRecording) return@setOnClickListener
+                      bitrateIndex = (bitrateIndex + 1) % bitrateOptions.size
+                      btnBitrate.text = "${bitrateOptions[bitrateIndex] / 1_000_000} Mbps"
+                  }
+
+                  btnAudioSource.setOnClickListener {
+                      if (isRecording) return@setOnClickListener
+                      useUnprocessedAudio = !useUnprocessedAudio
+                      btnAudioSource.text = if (useUnprocessedAudio) "MIC: RAW" else "MIC: STD"
+                  }
+
+                  btnWbLock.setOnClickListener {
+                      wbLocked = !wbLocked
+                      btnWbLock.text = if (wbLocked) "WB: LOCKED" else "WB: AUTO"
+                      applyPipelineParameters()
+                  }
+
+                  btnAeMode.setOnClickListener {
+                      manualExposure = !manualExposure
+                      btnAeMode.text = if (manualExposure) "EXP: MANUAL" else "EXP: AUTO"
+                      tvIsoLabel.text = if (manualExposure) "ISO: $currentIso" else "ISO: AUTO"
+                      applyPipelineParameters()
+                  }
+
+                  btnIsoBoost.setOnClickListener {
+                      isoBoost = !isoBoost
+                      btnIsoBoost.text = if (isoBoost) "BOOST ISO: ON" else "BOOST ISO: OFF"
+                      applyPipelineParameters()
+                  }
+
+                  btnSwitchLens.setOnClickListener {
+                      if (isRecording) return@setOnClickListener
+                      isFrontLens = !isFrontLens
+                      btnSwitchLens.text = if (isFrontLens) "LENS: FRONT" else "LENS: BACK"
+                      reopenCamera()
+                  }
+
+                  seekIso.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                      override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                          if (!fromUser) return
+                          manualExposure = true
+                          btnAeMode.text = "EXP: MANUAL"
+                          val minIso = isoRange.lower
+                          val maxIso = isoRange.upper.coerceAtMost(if (isoBoost) 12800 else 3200)
+                          currentIso = minIso + ((maxIso - minIso) * progress / 100)
+                          tvIsoLabel.text = "ISO: $currentIso"
+                          applyPipelineParameters()
+                      }
+                      override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                      override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                  })
+
+                  val shutterDenominators = listOf(24, 30, 48, 50, 60, 100, 120, 250, 500, 1000, 2000)
+                  seekShutter.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                      override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                          if (!fromUser) return
+                          manualExposure = true
+                          btnAeMode.text = "EXP: MANUAL"
+                          val idx = (progress * (shutterDenominators.size - 1)) / 100
+                          val denom = shutterDenominators[idx]
+                          currentShutterNs = (1_000_000_000L / denom).coerceIn(exposureTimeRange.lower, exposureTimeRange.upper)
+                          tvShutterLabel.text = "SHT: 1/$denom"
+                          applyPipelineParameters()
+                      }
+                      override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                      override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                  })
+
+                  seekFocus.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                      override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                          if (!fromUser) return
+                          if (progress == 0) {
+                              manualFocus = false
+                              tvFocusLabel.text = "FOC: AUTO"
+                          } else {
+                              manualFocus = true
+                              currentFocusDiopter = (progress / 100f) * minFocusDist
+                              tvFocusLabel.text = String.format("FOC: %.1fD", currentFocusDiopter)
+                          }
+                          applyPipelineParameters()
+                      }
+                      override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                      override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                  })
+
+                  btnRecord.setOnClickListener {
+                      if (isRecording) stopRecordingVideo() else startRecordingVideo()
+                  }
+              }
+
+              private fun checkPermissionsAndOpenCamera() {
+                  val perms = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+                  if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                      perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                  }
+                  val missing = perms.filter {
+                      ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+                  }
+                  if (missing.isNotEmpty()) {
+                      ActivityCompat.requestPermissions(this, missing.toTypedArray(), 101)
+                  } else {
+                      openCamera()
+                  }
+              }
+
+              override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+                  super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+                  if (requestCode == 101 && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                      openCamera()
+                  } else {
+                      Toast.makeText(this, "Camera & Audio permissions required.", Toast.LENGTH_LONG).show()
+                  }
+              }
+
+              @SuppressLint("MissingPermission")
+              private fun openCamera() {
+                  val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                  try {
+                      val targetFacing = if (isFrontLens) CameraCharacteristics.LENS_FACING_FRONT else CameraCharacteristics.LENS_FACING_BACK
+                      currentCameraId = manager.cameraIdList.firstOrNull { id ->
+                          manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == targetFacing
+                      } ?: manager.cameraIdList.first()
+
+                      val chars = manager.getCameraCharacteristics(currentCameraId)
+                      isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: Range(100, 3200)
+                      exposureTimeRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE) ?: Range(100_000L, 100_000_000L)
+                      minFocusDist = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+
+                      manager.openCamera(currentCameraId, stateCallback, backgroundHandler)
+                  } catch (e: Exception) {
+                      Toast.makeText(this, "Camera error: ${e.message}", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              private fun reopenCamera() {
+                  closeCamera()
+                  openCamera()
+              }
+
+              private val stateCallback = object : CameraDevice.StateCallback() {
+                  override fun onOpened(camera: CameraDevice) {
+                      cameraDevice = camera
+                      startPreviewSession()
+                  }
+                  override fun onDisconnected(camera: CameraDevice) {
+                      camera.close()
+                      cameraDevice = null
+                  }
+                  override fun onError(camera: CameraDevice, error: Int) {
+                      camera.close()
+                      cameraDevice = null
+                  }
+              }
+
+              private fun startPreviewSession() {
+                  val device = cameraDevice ?: return
+                  val texture = viewfinder.surfaceTexture ?: return
+                  val targetSize = resolutions[resIndex]
+                  texture.setDefaultBufferSize(targetSize.width, targetSize.height)
+                  val previewSurface = Surface(texture)
+
+                  try {
+                      previewRequestBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                          addTarget(previewSurface)
+                      }
+                      device.createCaptureSession(
+                          listOf(previewSurface),
+                          object : CameraCaptureSession.StateCallback() {
+                              override fun onConfigured(session: CameraCaptureSession) {
+                                  captureSession = session
+                                  applyPipelineParameters()
+                              }
+                              override fun onConfigureFailed(session: CameraCaptureSession) {}
+                          },
+                          backgroundHandler
+                      )
+                  } catch (e: Exception) {
+                      e.printStackTrace()
+                  }
+              }
+
+              private fun applyPipelineParameters() {
+                  val builder = previewRequestBuilder ?: return
+                  val session = captureSession ?: return
+                  val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                  val chars = manager.getCameraCharacteristics(currentCameraId)
+
+                  try {
+                      val availableEdgeModes = chars.get(CameraCharacteristics.EDGE_AVAILABLE_EDGE_MODES) ?: intArrayOf()
+                      val availableNrModes = chars.get(CameraCharacteristics.NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES) ?: intArrayOf()
+
+                      if (bypassIsp) {
+                          if (availableEdgeModes.contains(CaptureRequest.EDGE_MODE_OFF)) {
+                              builder.set(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_OFF)
+                          }
+                          when {
+                              availableNrModes.contains(CaptureRequest.NOISE_REDUCTION_MODE_MINIMAL) ->
+                                  builder.set(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_MINIMAL)
+                              availableNrModes.contains(CaptureRequest.NOISE_REDUCTION_MODE_OFF) ->
+                                  builder.set(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_OFF)
+                          }
+                      } else {
+                          builder.set(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_FAST)
+                          builder.set(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_FAST)
+                      }
+
+                      val fps = fpsOptions[fpsIndex]
+                      builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(fps, fps))
+
+                      if (manualExposure) {
+                          builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                          val boostedIsoVal = if (isoBoost) (currentIso * 2).coerceAtMost(isoRange.upper) else currentIso
+                          builder.set(CaptureRequest.SENSOR_SENSITIVITY, boostedIsoVal.coerceIn(isoRange.lower, isoRange.upper))
+                          builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentShutterNs)
+                      } else {
+                          builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                      }
+
+                      builder.set(CaptureRequest.CONTROL_AWB_LOCK, wbLocked)
+
+                      if (manualFocus && minFocusDist > 0f) {
+                          builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                          builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocusDiopter)
+                      } else {
+                          builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
+                      }
+
+                      session.setRepeatingRequest(builder.build(), null, backgroundHandler)
+                  } catch (e: Exception) {
+                      e.printStackTrace()
+                  }
+              }
+
+              private fun createOutputParcelFileDescriptor(): ParcelFileDescriptor? {
+                  val filename = "NATIVECAM_${System.currentTimeMillis()}.mp4"
+                  val contentValues = ContentValues().apply {
+                      put(MediaStore.Video.Media.DISPLAY_NAME, filename)
+                      put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                          put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/NativeCamera")
+                      }
+                  }
+                  val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
+                  return uri?.let { contentResolver.openFileDescriptor(it, "w") }
+              }
+
+              private fun startRecordingVideo() {
+                  val device = cameraDevice ?: return
+                  val texture = viewfinder.surfaceTexture ?: return
+                  val targetSize = resolutions[resIndex]
+                  val fps = fpsOptions[fpsIndex]
+                  val bitrate = bitrateOptions[bitrateIndex]
+
+                  try {
+                      captureSession?.close()
+                      captureSession = null
+
+                      activePfd = createOutputParcelFileDescriptor()
+                      val pfd = activePfd ?: return
+
+                      mediaRecorder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                          MediaRecorder(this)
+                      } else {
+                          @Suppress("DEPRECATION")
+                          MediaRecorder()
+                      }).apply {
+                          setAudioSource(
+                              if (useUnprocessedAudio && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+                                  MediaRecorder.AudioSource.UNPROCESSED
+                              else
+                                  MediaRecorder.AudioSource.CAMCORDER
+                          )
+                          setVideoSource(MediaRecorder.VideoSource.SURFACE)
+                          setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                          setOutputFile(pfd.fileDescriptor)
+                          setVideoEncodingBitRate(bitrate)
+                          setVideoFrameRate(fps)
+                          setVideoSize(targetSize.width, targetSize.height)
+                          setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+                          setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                          setAudioEncodingBitRate(320_000)
+                          setAudioSamplingRate(48_000)
+                          setAudioChannels(2)
+                          prepare()
+                      }
+
+                      texture.setDefaultBufferSize(targetSize.width, targetSize.height)
+                      val previewSurface = Surface(texture)
+                      val recorderSurface = mediaRecorder!!.surface
+
+                      previewRequestBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                          addTarget(previewSurface)
+                          addTarget(recorderSurface)
+                      }
+
+                      device.createCaptureSession(
+                          listOf(previewSurface, recorderSurface),
+                          object : CameraCaptureSession.StateCallback() {
+                              override fun onConfigured(session: CameraCaptureSession) {
+                                  captureSession = session
+                                  applyPipelineParameters()
+                                  runOnUiThread {
+                                      isRecording = true
+                                      mediaRecorder?.start()
+                                      recStartTime = SystemClock.elapsedRealtime()
+                                      btnRecord.text = "STOP REC"
+                                      uiHandler.post(timerRunnable)
+                                  }
+                              }
+                              override fun onConfigureFailed(session: CameraCaptureSession) {}
+                          },
+                          backgroundHandler
+                      )
+                  } catch (e: Exception) {
+                      Toast.makeText(this, "Rec error: ${e.message}", Toast.LENGTH_LONG).show()
+                      startPreviewSession()
+                  }
+              }
+
+              private fun stopRecordingVideo() {
+                  isRecording = false
+                  uiHandler.removeCallbacks(timerRunnable)
+                  tvRecTimer.text = "SAVED -> DCIM/NativeCamera"
+                  btnRecord.text = "REC VIDEO"
+
+                  try {
+                      captureSession?.stopRepeating()
+                      captureSession?.abortCaptures()
+                  } catch (_: Exception) {}
+
+                  try {
+                      mediaRecorder?.stop()
+                  } catch (_: Exception) {}
+                  mediaRecorder?.reset()
+                  mediaRecorder?.release()
+                  mediaRecorder = null
+
+                  try {
+                      activePfd?.close()
+                  } catch (_: Exception) {}
+                  activePfd = null
+
+                  Toast.makeText(this, "Saved MP4 to DCIM/NativeCamera", Toast.LENGTH_SHORT).show()
+                  startPreviewSession()
+              }
+
+              private fun closeCamera() {
+                  captureSession?.close()
+                  captureSession = null
+                  cameraDevice?.close()
+                  cameraDevice = null
+                  mediaRecorder?.release()
+                  mediaRecorder = null
+              }
+
+              private fun startBackgroundThread() {
+                  backgroundThread = HandlerThread("Camera2Thread").also { it.start() }
+                  backgroundHandler = Handler(backgroundThread!!.looper)
+              }
+
+              private fun stopBackgroundThread() {
+                  backgroundThread?.quitSafely()
+                  try {
+                      backgroundThread?.join()
+                      backgroundThread = null
+                      backgroundHandler = null
+                  } catch (e: InterruptedException) {
+                      e.printStackTrace()
+                  }
+              }
+          }
+          EOF
+
+          gradle assembleDebug --no-daemon
 
       - name: Upload Compiled APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: NativeCameraPro-debug-apk
-          path: "**/app/build/outputs/apk/debug/app-debug.apk"
+          path: /tmp/NativeCameraBuild/app/build/outputs/apk/debug/app-debug.apk
